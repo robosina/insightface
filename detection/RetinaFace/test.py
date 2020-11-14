@@ -7,12 +7,13 @@ import glob
 from retinaface import RetinaFace
 
 thresh = 0.8
-scales = [1024, 1980]
+scales = [640, 480]
 
-count = 1
+count = 5
 
-gpuid = 0
-detector = RetinaFace('./model/R50', 0, gpuid, 'net3')
+gpuid = -1
+# detector = RetinaFace('./model/R50', 0, gpuid, 'net3')
+detector = RetinaFace('./mnet.25/mnet.25', 0, gpuid, 'net3')
 
 img = cv2.imread('t1.jpg')
 print(img.shape)
@@ -32,12 +33,11 @@ print('im_scale', im_scale)
 
 scales = [im_scale]
 flip = False
-
+import time
 for c in range(count):
-    faces, landmarks = detector.detect(img,
-                                       thresh,
-                                       scales=scales,
-                                       do_flip=flip)
+    t1 = time.time()
+    faces, landmarks = detector.detect(img, thresh, scales=scales, do_flip=flip)
+    print("elapsed time:{}".format(time.time() - t1))
     print(c, faces.shape, landmarks.shape)
 
 if faces is not None:

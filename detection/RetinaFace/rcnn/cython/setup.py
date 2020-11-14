@@ -11,7 +11,8 @@ from setuptools import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
 import numpy as np
-
+from Cython.Build import cythonize
+import numpy
 
 def find_in_path(name, path):
     "Find a file in a search path"
@@ -124,13 +125,13 @@ class custom_build_ext(build_ext):
 
 ext_modules = [
     Extension("bbox", ["bbox.pyx"],
-              extra_compile_args={'gcc': ["-Wno-cpp", "-Wno-unused-function"]},
+              extra_compile_args={'msvc': ["-Wno-cpp", "-Wno-unused-function"]},
               include_dirs=[numpy_include]),
     Extension("anchors", ["anchors.pyx"],
-              extra_compile_args={'gcc': ["-Wno-cpp", "-Wno-unused-function"]},
+              extra_compile_args={'msvc': ["-Wno-cpp", "-Wno-unused-function"]},
               include_dirs=[numpy_include]),
     Extension("cpu_nms", ["cpu_nms.pyx"],
-              extra_compile_args={'gcc': ["-Wno-cpp", "-Wno-unused-function"]},
+              extra_compile_args={'msvc': ["-Wno-cpp", "-Wno-unused-function"]},
               include_dirs=[numpy_include]),
 ]
 
@@ -157,9 +158,17 @@ if CUDA is not None:
 else:
     print('Skipping GPU_NMS')
 
+# setup(
+#     name='frcnn_cython',
+#     ext_modules=ext_modules,
+#     # inject our custom trigger
+#     # cmdclass={'build_ext': custom_build_ext},
+# )
+
 setup(
-    name='frcnn_cython',
-    ext_modules=ext_modules,
-    # inject our custom trigger
-    cmdclass={'build_ext': custom_build_ext},
+    # cythonize(["bbox.pyx", "anchors.pyx", "cpu_nms.pyx"]),
+    ext_modules=[Extension('bbox', ['bbox.c']),
+                 Extension('anchors', ['anchors.c']),
+                 Extension('cpu_nms', ['cpu_nms.c'])],
+    include_dirs=[numpy.get_include()]
 )

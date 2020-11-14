@@ -13,6 +13,7 @@ from rcnn.processing.bbox_transform import clip_boxes
 from rcnn.processing.generate_anchor import generate_anchors_fpn, anchors_plane
 from rcnn.processing.nms import gpu_nms_wrapper, cpu_nms_wrapper
 from rcnn.processing.bbox_transform import bbox_overlaps
+from rcnn.cython.detect_high import detectFaces
 
 
 class RetinaFace:
@@ -587,6 +588,10 @@ class RetinaFace:
             print('C uses', diff.total_seconds(), 'seconds')
         return det, landmarks
 
+    def detectD2(self, image, threshold=0.5, scales=[1.0], do_flip=False):
+        return detectFaces(self, do_flip, scales, image, threshold)
+
+    # detectFaces(self, do_flip, scales, image, threshold):
     def detectD(self, image, threshold=0.5, scales=[1.0], do_flip=False):
         start = time.time()
         # print('in_detect', threshold, scales, do_flip, do_nms)
@@ -672,50 +677,20 @@ class RetinaFace:
                     anchors = anchors_plane(height, width, stride, anchors_fpn)
                     # print((height, width), (_height, _width), anchors.shape, bbox_deltas.shape, scores.shape, file=sys.stderr)
                     anchors = anchors.reshape((K * A, 4))
-                    # print('num_anchors', self._num_anchors['stride%s'%s], file=sys.stderr)
-                    # print('HW', (height, width), file=sys.stderr)
-                    # print('anchors_fpn', anchors_fpn.shape, file=sys.stderr)
-                    # print('anchors', anchors.shape, file=sys.stderr)
-                    # print('bbox_deltas', bbox_deltas.shape, file=sys.stderr)
-                    # print('scores', scores.shape, file=sys.stderr)
 
                     scores = self._clip_pad(scores, (height, width))
                     scores = scores.transpose((0, 2, 3, 1)).reshape((-1, 1))
-
-                    # print('pre', bbox_deltas.shape, height, width)
                     bbox_deltas = self._clip_pad(bbox_deltas, (height, width))
-                    # print('after', bbox_deltas.shape, height, width)
                     bbox_deltas = bbox_deltas.transpose((0, 2, 3, 1))
                     bbox_pred_len = bbox_deltas.shape[3] // A
-                    # print(bbox_deltas.shape)
                     bbox_deltas = bbox_deltas.reshape((-1, bbox_pred_len))
-
-                    # print(anchors.shape, bbox_deltas.shape, A, K, file=sys.stderr)
                     proposals = self.bbox_pred(anchors, bbox_deltas)
                     proposals = clip_boxes(proposals, im_info[:2])
 
-                    # if self.vote:
-                    #  if im_scale>1.0:
-                    #    keep = self._filter_boxes2(proposals, 160*im_scale, -1)
-                    #  else:
-                    #    keep = self._filter_boxes2(proposals, -1, 100*im_scale)
-                    #  if stride==4:
-                    #    keep = self._filter_boxes2(proposals, 12*im_scale, -1)
-                    #    proposals = proposals[keep, :]
-                    #    scores = scores[keep]
-
-                    # keep = self._filter_boxes(proposals, min_size_dict['stride%s'%s] * im_info[2])
-                    # proposals = proposals[keep, :]
-                    # scores = scores[keep]
-                    # print('333', proposals.shape)
-
                     scores_ravel = scores.ravel()  # We Ravel The Scores For All Of The BBoxes
-                    # print('__shapes', proposals.shape, scores_ravel.shape)
-                    # print('max score', np.max(scores_ravel))
+
                     order = np.where(scores_ravel >= threshold)[0]  # We Only Pick The Best Scores By Threshold
-                    # _scores = scores_ravel[order]
-                    # _order = _scores.argsort()[::-1]
-                    # order = order[_order]
+
                     proposals = proposals[order, :]
                     scores = scores[order]
                     if stride == 4 and self.decay4 < 1.0:
@@ -744,21 +719,13 @@ class RetinaFace:
 
                         if flip:
                             landmarks[:, :, 0] = im.shape[1] - landmarks[:, :, 0] - 1
-                            # for a in range(5):
-                            #  oldx1 = landmarks[:, a].copy()
-                            #  landmarks[:,a] = im.shape[1] - oldx1 - 1
                             order = [1, 0, 2, 4, 3]
                             flandmarks = landmarks.copy()
                             for idx, a in enumerate(order):
                                 flandmarks[:, idx, :] = landmarks[:, a, :]
-                                # flandmarks[:, idx*2] = landmarks[:,a*2]
-                                # flandmarks[:, idx*2+1] = landmarks[:,a*2+1]
                             landmarks = flandmarks
                         landmarks[:, :, 0:2] /= im_scale
-                        # landmarks /= im_scale
-                        # landmarks = landmarks.reshape( (-1, landmark_pred_len) )
                         landmarks_list.append(landmarks)
-                        # proposals = np.hstack((proposals, landmarks))
 
         proposals = np.vstack(proposals_list)
         landmarks = None
@@ -770,9 +737,6 @@ class RetinaFace:
         # print('shapes', proposals.shape, scores.shape)
         scores_ravel = scores.ravel()
         order = scores_ravel.argsort()[::-1]
-        # if config.TEST.SCORE_THRESH>0.0:
-        #  _count = np.sum(scores_ravel>config.TEST.SCORE_THRESH)
-        #  order = order[:_count]
         proposals = proposals[order, :]
         scores = scores[order]
         if not self.vote and self.use_landmarks:
@@ -789,8 +753,6 @@ class RetinaFace:
         else:
             det = np.hstack((pre_det, proposals[:, 4:]))
             det = self.bbox_vote(det)
-        # if self.use_landmarks:
-        #  det = np.hstack((det, landmarks))
 
         end = time.time()
         logger.debug("Single Detection Time => %s" % (end - start))

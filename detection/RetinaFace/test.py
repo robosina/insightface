@@ -36,7 +36,7 @@ flip = False
 import time
 for c in range(count):
     t1 = time.time()
-    faces, landmarks = detector.detect(img, thresh, scales=scales, do_flip=flip)
+    faces, landmarks = detector.detectD(img, thresh, scales=scales, do_flip=flip)
     print("elapsed time:{}".format(time.time() - t1))
     print(c, faces.shape, landmarks.shape)
 

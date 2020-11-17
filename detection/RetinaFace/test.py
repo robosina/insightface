@@ -10,8 +10,9 @@ thresh = 0.8
 scales = [640, 480]
 
 count = 5
+batch_size=100
 
-gpuid = -1
+gpuid = 0
 # detector = RetinaFace('./model/R50', 0, gpuid, 'net3')
 detector = RetinaFace('./mnet.25/mnet.25', 0, gpuid, 'net3')
 
@@ -34,30 +35,45 @@ print('im_scale', im_scale)
 scales = [im_scale]
 flip = False
 import time
-for c in range(count):
-    t1 = time.time()
-    faces, landmarks = detector.detectD2(img, thresh, scales=scales, do_flip=flip)
-    print("elapsed time:{}".format(time.time() - t1))
-    print(c, faces.shape, landmarks.shape)
+images=[]
+for c in range(batch_size):
+    images.append(img)
 
-if faces is not None:
-    print('find', faces.shape[0], 'faces')
-    for i in range(faces.shape[0]):
-        #print('score', faces[i][4])
-        box = faces[i].astype(np.int)
-        #color = (255,0,0)
-        color = (0, 0, 255)
-        cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), color, 2)
-        if landmarks is not None:
-            landmark5 = landmarks[i].astype(np.int)
-            #print(landmark.shape)
-            for l in range(landmark5.shape[0]):
-                color = (0, 0, 255)
-                if l == 0 or l == 3:
-                    color = (0, 255, 0)
-                cv2.circle(img, (landmark5[l][0], landmark5[l][1]), 1, color,
-                           2)
+for i in range(count):
+    print("**********************normal********************************")
+    faces, landmarks = detector.detect_batch(images, threshold=thresh, scales=scales, do_flip=flip)
+    print("**********************cython********************************")
 
-    filename = './detector_test.jpg'
-    print('writing', filename)
-    cv2.imwrite(filename, img)
+    # faces2, landmarks2 = detector.detect_batch_cython(images, threshold=thresh, scales=scales, do_flip=flip)
+    print(i)
+# print(c, faces.shape, landmarks.shape)
+
+# for c in range(count):
+#     t1 = time.time()
+#     faces, landmarks = detector.detectD(img, thresh, scales=scales, do_flip=flip)
+#     print("elapsed time:{}".format(time.time() - t1))
+#     print(c, faces.shape, landmarks.shape)
+#
+# if faces is not None:
+#     print('find', faces.shape[0], 'faces')
+#     for i in range(faces.shape[0]):
+#         #print('score', faces[i][4])
+#         box = faces[i].astype(np.int)
+#         #color = (255,0,0)
+#         color = (0, 0, 255)
+#         cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), color, 2)
+#         if landmarks is not None:
+#             landmark5 = landmarks[i].astype(np.int)
+#             #print(landmark.shape)
+#             for l in range(landmark5.shape[0]):
+#                 color = (0, 0, 255)
+#                 if l == 0 or l == 3:
+#                     color = (0, 255, 0)
+#                 cv2.circle(img, (landmark5[l][0], landmark5[l][1]), 1, color,
+#                            2)
+#
+#     filename = './detector_test.jpg'
+#     print('writing', filename)
+#     cv2.imwrite(filename, img)
+#
+# print('finished')

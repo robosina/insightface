@@ -4,8 +4,11 @@ import os
 import datetime
 import time
 import numpy as np
+import mxnet as mx
 from mxnet import ndarray as nd
 import cv2
+from ctypes import *
+import numpy as np
 # from rcnn import config
 from rcnn.logger import logger
 # from rcnn.processing.bbox_transform import nonlinear_pred, clip_boxes, landmark_pred
@@ -13,7 +16,9 @@ from rcnn.processing.bbox_transform import clip_boxes
 from rcnn.processing.generate_anchor import generate_anchors_fpn, anchors_plane
 from rcnn.processing.nms import gpu_nms_wrapper, cpu_nms_wrapper
 from rcnn.processing.bbox_transform import bbox_overlaps
-from rcnn.cython.detect_high import detectFaces
+
+from rcnn.cython.bbox_flitering import postprocessing
+# from rcnn.cython.detect_high import detectFaces
 
 
 class RetinaFace:
@@ -22,7 +27,7 @@ class RetinaFace:
         from mxnet import ndarray as nd
         self.mx = mx
         self.nd = nd
-        self.ctx_id = 0 if ctx_id is True else -1
+        self.ctx_id = ctx_id
         self.network = network
         self.decay4 = decay4
         self.nms_threshold = nms
@@ -590,6 +595,238 @@ class RetinaFace:
 
     def detectD2(self, image, threshold=0.5, scales=[1.0], do_flip=False):
         return detectFaces(self, do_flip, scales, image, threshold)
+
+    def detect_batch_cython(self, images, scales=[1.0], threshold=0.5, do_flip=False):
+        t0 = time.time()
+        im_scale = scales[0]
+        if im_scale != 1.0:
+            images = [cv2.resize(image, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_CUBIC) for image
+                      in images]
+
+        images = np.array(images, dtype=np.float32)
+
+        t1 = time.time()
+        print("T1 (Numpy Array Initialization) => %.3f" % float(t1 - t0))
+
+        image_info = [images[0].shape[0], images[0].shape[1]]
+        image_tensors = np.empty((len(images), 3, images[0].shape[0], images[0].shape[1]))
+
+        t2 = time.time()
+        print("T2 (Numpy Empty Array Initialization) => %.3f" % float(t2 - t1))
+
+        # for j, image_tensor in enumerate(image_tensors):
+        #     for i in range(3):
+        #         image_tensor[i, :, :] = (images_copy[j][:, :, 2 - i] / self.pixel_scale - self.pixel_means[2 - i]) / self.pixel_stds[2 - i]
+
+        mstd1 = self.pixel_means[2] / self.pixel_stds[2]
+        mstd2 = self.pixel_means[1] / self.pixel_stds[1]
+        mstd3 = self.pixel_means[0] / self.pixel_stds[0]
+        for j, (image_copy, image_tensor) in enumerate(zip(images, image_tensors)):
+            image_tensor[0, :, :] = (image_copy[:, :, 2] / self.pixel_stds[2]) - mstd1
+            image_tensor[1, :, :] = (image_copy[:, :, 1] / self.pixel_stds[1]) - mstd2
+            image_tensor[2, :, :] = (image_copy[:, :, 0] / self.pixel_stds[0]) - mstd3
+
+        t3 = time.time()
+        print("T3 (Image Tensor Copying) => %.3f" % float(t3 - t2))
+
+        data = self.nd.array(image_tensors)
+        db = self.mx.io.DataBatch(data=(data,), provide_data=[('data', data.shape)])
+
+        t4 = time.time()
+        print("T4 (MXNet Array Initialization) => %.3f" % float(t4 - t3))
+
+        self.model.forward(db, is_train=False)
+        net_outs = self.model.get_outputs()
+
+        t5 = time.time()
+        print("T5 (Model Forward) => %.2f" % float(t5 - t4))
+
+        final_dets_list = []
+        final_landmarks_list = []
+
+        t6 = time.time()
+        print("T1 + T2 + T3 + T4 + T5 => %.2f" % float(t6 - t0))
+
+        # # TODO Remove Later
+        # pickle_data = [data, self._feat_stride_fpn, self.use_landmarks,
+        #                net_outs, self._num_anchors, self._anchors_fpn,
+        #                threshold, self.decay4, im_scale, self.vote,
+        #                final_dets_list, final_landmarks_list, image_info]
+        # pickle.dump(pickle_data, open('./CYTHON_FACE_SUITE_TEST.pkl', "wb"))
+        # TODO Remove Later
+
+        final_dets_list, final_landmarks_list = postprocessing(self,data, net_outs, image_info, threshold, im_scale, final_dets_list, final_landmarks_list)
+
+        t7 = time.time()
+        print("T7 (Landmark & BBox Processing) => %.2f" % (t7 - t6))
+        return final_dets_list, final_landmarks_list
+
+    def detect_batch(self, images, scales=[1.0], threshold=0.5, do_flip=False):
+        t0 = time.time()
+        im_scale = scales[0]
+        if im_scale != 1.0:
+            images = [cv2.resize(image, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_CUBIC) for image
+                      in images]
+
+        images = np.array(images, dtype=np.float32)
+
+        t1 = time.time()
+        print("T1 (Numpy Array Initialization) => %.3f" % float(t1 - t0))
+
+        image_info = [images[0].shape[0], images[0].shape[1]]
+        image_tensors = np.empty((len(images), 3, images[0].shape[0], images[0].shape[1]))
+
+        t2 = time.time()
+        print("T2 (Numpy Empty Array Initialization) => %.3f" % float(t2 - t1))
+
+        # for j, image_tensor in enumerate(image_tensors):
+        #     for i in range(3):
+        #         image_tensor[i, :, :] = (images_copy[j][:, :, 2 - i] / self.pixel_scale - self.pixel_means[2 - i]) / self.pixel_stds[2 - i]
+
+        mstd1 = self.pixel_means[2] / self.pixel_stds[2]
+        mstd2 = self.pixel_means[1] / self.pixel_stds[1]
+        mstd3 = self.pixel_means[0] / self.pixel_stds[0]
+        for j, (image_copy, image_tensor) in enumerate(zip(images, image_tensors)):
+            image_tensor[0, :, :] = (image_copy[:, :, 2] / self.pixel_stds[2]) - mstd1
+            image_tensor[1, :, :] = (image_copy[:, :, 1] / self.pixel_stds[1]) - mstd2
+            image_tensor[2, :, :] = (image_copy[:, :, 0] / self.pixel_stds[0]) - mstd3
+
+        t3 = time.time()
+        print("T3 (Image Tensor Copying) => %.3f" % float(t3 - t2))
+
+        data = self.nd.array(image_tensors)
+        db = self.mx.io.DataBatch(data=(data,), provide_data=[('data', data.shape)])
+
+        t4 = time.time()
+        print("T4 (MXNet Array Initialization) => %.3f" % float(t4 - t3))
+
+        self.model.forward(db, is_train=False)
+        net_outs = self.model.get_outputs()
+
+        t5 = time.time()
+        print("T5 (Model Forward) => %.2f" % float(t5 - t4))
+
+        final_dets_list = []
+        final_landmarks_list = []
+
+        t6 = time.time()
+        print("T1 + T2 + T3 + T4 + T5 => %.2f" % float(t6 - t0))
+
+        # # TODO Remove Later
+        # pickle_data = [data, self._feat_stride_fpn, self.use_landmarks,
+        #                net_outs, self._num_anchors, self._anchors_fpn,
+        #                threshold, self.decay4, im_scale, self.vote,
+        #                final_dets_list, final_landmarks_list, image_info]
+        # pickle.dump(pickle_data, open('./CYTHON_FACE_SUITE_TEST.pkl', "wb"))
+        # TODO Remove Later
+
+        lib = cdll.LoadLibrary('/home/isv/qt_projects/dlib2/libdlib2.so')
+        fun = lib.getdata
+        # fun(c_int(data.shape[0]),c_void_p)
+
+        for output_index in range(data.shape[0]):
+            proposals_list = []
+            scores_list = []
+            landmarks_list = []
+
+            for _idx, s in enumerate(self._feat_stride_fpn):
+                _key = 'stride%s' % s
+                stride = int(s)
+                if self.use_landmarks:
+                    idx = _idx * 3
+                else:
+                    idx = _idx * 2
+                scores = net_outs[idx][output_index].asnumpy()  # MY CHANGE
+                # print(scores.shape)
+                scores = scores.reshape((1, *scores.shape))
+
+                scores = scores[:, self._num_anchors['stride%s' % s]:, :, :]
+
+                idx += 1
+                bbox_deltas = net_outs[idx][output_index].asnumpy()  # MY CHANGE
+                bbox_deltas = bbox_deltas.reshape((1, *bbox_deltas.shape))
+
+                height, width = bbox_deltas.shape[2], bbox_deltas.shape[3]
+
+                A = self._num_anchors['stride%s' % s]
+                K = height * width
+                anchors_fpn = self._anchors_fpn['stride%s' % s]
+                anchors = anchors_plane(height, width, stride, anchors_fpn)
+                anchors = anchors.reshape((K * A, 4))
+
+                scores = self._clip_pad(scores, (height, width))
+                scores = scores.transpose((0, 2, 3, 1)).reshape((-1, 1))
+
+                bbox_deltas = self._clip_pad(bbox_deltas, (height, width))
+                bbox_deltas = bbox_deltas.transpose((0, 2, 3, 1))
+                bbox_pred_len = bbox_deltas.shape[3] // A
+                bbox_deltas = bbox_deltas.reshape((-1, bbox_pred_len))
+
+                proposals = self.bbox_pred(anchors, bbox_deltas)
+                proposals = clip_boxes(proposals, image_info[:2])
+
+                scores_ravel = scores.ravel()  # We Ravel The Scores For All Of The BBoxes
+                order = np.where(scores_ravel >= threshold)[0]  # We Only Pick The Best Scores By Threshold
+                proposals = proposals[order, :]
+                scores = scores[order]
+                if stride == 4 and self.decay4 < 1.0:
+                    scores *= self.decay4
+
+                proposals[:, 0:4] /= im_scale
+
+                proposals_list.append(proposals)
+                scores_list.append(scores)
+
+                if not self.vote and self.use_landmarks:
+                    idx += 1
+                    landmark_deltas = net_outs[idx][output_index].asnumpy()
+                    landmark_deltas = landmark_deltas.reshape((1, *landmark_deltas.shape))  # MY CHANGE
+
+                    landmark_deltas = self._clip_pad(landmark_deltas, (height, width))
+                    landmark_pred_len = landmark_deltas.shape[1] // A
+                    landmark_deltas = landmark_deltas.transpose((0, 2, 3, 1)).reshape((-1, 5, landmark_pred_len // 5))
+                    landmarks = self.landmark_pred(anchors, landmark_deltas)
+                    landmarks = landmarks[order, :]
+
+                    landmarks[:, :, 0:2] /= im_scale
+                    landmarks_list.append(landmarks)
+
+            proposals = np.vstack(proposals_list)
+            landmarks = None
+            if proposals.shape[0] == 0:
+                if self.use_landmarks:
+                    landmarks = np.zeros((0, 5, 2))
+                final_dets_list.append(np.zeros((0, 5)))
+                final_landmarks_list.append(landmarks)
+                continue
+            scores = np.vstack(scores_list)
+
+            scores_ravel = scores.ravel()
+            order = scores_ravel.argsort()[::-1]
+
+            proposals = proposals[order, :]
+            scores = scores[order]
+            if not self.vote and self.use_landmarks:
+                landmarks = np.vstack(landmarks_list)
+                landmarks = landmarks[order].astype(np.float32, copy=False)
+
+            pre_det = np.hstack((proposals[:, 0:4], scores)).astype(np.float32, copy=False)
+            if not self.vote:
+                keep = self.nms(pre_det)
+                det = np.hstack((pre_det, proposals[:, 4:]))
+                det = det[keep, :]
+                if self.use_landmarks:
+                    landmarks = landmarks[keep]
+            else:
+                det = np.hstack((pre_det, proposals[:, 4:]))
+                det = self.bbox_vote(det)
+
+            final_dets_list.append(det)
+            final_landmarks_list.append(landmarks)
+
+        t7 = time.time()
+        print("T7 (Landmark & BBox Processing) => %.2f" % (t7 - t6))
+        return final_dets_list, final_landmarks_list
 
     # detectFaces(self, do_flip, scales, image, threshold):
     def detectD(self, image, threshold=0.5, scales=[1.0], do_flip=False):

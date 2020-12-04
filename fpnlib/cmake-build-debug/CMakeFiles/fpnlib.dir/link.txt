@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -g  -shared -Wl,-soname,libfpnlib.so -o libfpnlib.so CMakeFiles/fpnlib.dir/library.c.o 

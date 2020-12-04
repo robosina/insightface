@@ -1,6 +1,8 @@
 from __future__ import print_function
 import sys
+import pickle
 import os
+from ctypes import *
 import datetime
 import time
 import numpy as np
@@ -9,6 +11,7 @@ from mxnet import ndarray as nd
 import cv2
 from ctypes import *
 import numpy as np
+import csv
 # from rcnn import config
 from rcnn.logger import logger
 # from rcnn.processing.bbox_transform import nonlinear_pred, clip_boxes, landmark_pred
@@ -18,6 +21,8 @@ from rcnn.processing.nms import gpu_nms_wrapper, cpu_nms_wrapper
 from rcnn.processing.bbox_transform import bbox_overlaps
 
 from rcnn.cython.bbox_flitering import postprocessing
+
+
 # from rcnn.cython.detect_high import detectFaces
 
 
@@ -644,21 +649,32 @@ class RetinaFace:
         final_dets_list = []
         final_landmarks_list = []
 
+        # nda.wait_to_read()
         t6 = time.time()
         print("T1 + T2 + T3 + T4 + T5 => %.2f" % float(t6 - t0))
-
         # # TODO Remove Later
         # pickle_data = [data, self._feat_stride_fpn, self.use_landmarks,
         #                net_outs, self._num_anchors, self._anchors_fpn,
         #                threshold, self.decay4, im_scale, self.vote,
         #                final_dets_list, final_landmarks_list, image_info]
-        # pickle.dump(pickle_data, open('./CYTHON_FACE_SUITE_TEST.pkl', "wb"))
+        # pickle.dump(pickle_data, open('./ctest.pkl', "wb"))
         # TODO Remove Later
+        for k in range(3):
+            t6 = time.time()
+            npNet_outs = [out.asnumpy() for out in net_outs]
+            t7 = time.time()
+            print("\033[1;31mT7 (Convert from mxnet to numpy) => %.2f\033[0m" % (t7 - t6))
 
-        final_dets_list, final_landmarks_list = postprocessing(self,data, net_outs, image_info, threshold, im_scale, final_dets_list, final_landmarks_list)
+        for i in range(3):
+            #     npNet_outs.append(net_outs[i].asnumpy())
+            final_dets_list, final_landmarks_list = postprocessing(self, data, npNet_outs, image_info, data.shape[0],
+                                                                   self._feat_stride_fpn, self.use_landmarks,
+                                                                   self._num_anchors,self._anchors_fpn,
+                                                                   threshold, im_scale, final_dets_list,
+                                                                   final_landmarks_list)
 
-        t7 = time.time()
-        print("T7 (Landmark & BBox Processing) => %.2f" % (t7 - t6))
+            t8 = time.time()
+            print("\033[1;32mT8 (Landmark & BBox Processing) => %.2f\033[0m" % (t8 - t7))
         return final_dets_list, final_landmarks_list
 
     def detect_batch(self, images, scales=[1.0], threshold=0.5, do_flip=False):
@@ -712,6 +728,14 @@ class RetinaFace:
         t6 = time.time()
         print("T1 + T2 + T3 + T4 + T5 => %.2f" % float(t6 - t0))
 
+        to_save = {'data': data, '_feat_stride_fpn': self._feat_stride_fpn}
+
+        # write that dictionary to a file
+        with open('my_log.csv', 'w+') as f:
+            w = csv.DictWriter(f, to_save.keys())
+            w.writeheader()
+            w.writerow(to_save)
+
         # # TODO Remove Later
         # pickle_data = [data, self._feat_stride_fpn, self.use_landmarks,
         #                net_outs, self._num_anchors, self._anchors_fpn,
@@ -720,8 +744,8 @@ class RetinaFace:
         # pickle.dump(pickle_data, open('./CYTHON_FACE_SUITE_TEST.pkl', "wb"))
         # TODO Remove Later
 
-        lib = cdll.LoadLibrary('/home/isv/qt_projects/dlib2/libdlib2.so')
-        fun = lib.getdata
+        # lib = cdll.LoadLibrary('/home/isv/qt_projects/dlib2/libdlib2.so')
+        # fun = lib.getdata
         # fun(c_int(data.shape[0]),c_void_p)
 
         for output_index in range(data.shape[0]):

@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/isv/Documents/insightface/fpnlib/library.c
+library.h
+/home/isv/Documents/insightface/fpnlib/library.h
+stdio.h
+-
+
+/home/isv/Documents/insightface/fpnlib/library.h
+stdio.h
+/home/isv/Documents/insightface/fpnlib/stdio.h
+stdbool.h
+/home/isv/Documents/insightface/fpnlib/stdbool.h
+

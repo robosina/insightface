@@ -5,14 +5,14 @@ import datetime
 import os
 import glob
 from retinaface import RetinaFace
-
+# import rcnn.cython.setup
 thresh = 0.8
 scales = [640, 480]
 
-count = 5
-batch_size=100
+count = 2
+batch_size=3
 
-gpuid = 0
+gpuid = -1
 # detector = RetinaFace('./model/R50', 0, gpuid, 'net3')
 detector = RetinaFace('./mnet.25/mnet.25', 0, gpuid, 'net3')
 
@@ -44,7 +44,7 @@ for i in range(count):
     faces, landmarks = detector.detect_batch(images, threshold=thresh, scales=scales, do_flip=flip)
     print("**********************cython********************************")
 
-    # faces2, landmarks2 = detector.detect_batch_cython(images, threshold=thresh, scales=scales, do_flip=flip)
+    faces2, landmarks2 = detector.detect_batch_cython(images, threshold=thresh, scales=scales, do_flip=flip)
     print(i)
 # print(c, faces.shape, landmarks.shape)
 

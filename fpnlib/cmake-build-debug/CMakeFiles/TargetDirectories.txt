@@ -1,0 +1,3 @@
+/home/isv/Documents/insightface/fpnlib/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/isv/Documents/insightface/fpnlib/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/isv/Documents/insightface/fpnlib/cmake-build-debug/CMakeFiles/fpnlib.dir

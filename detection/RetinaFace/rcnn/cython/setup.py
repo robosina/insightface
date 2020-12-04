@@ -134,8 +134,9 @@ ext_modules = [
               extra_compile_args={'gcc': ["-Wno-cpp", "-Wno-unused-function"]},
               include_dirs=[numpy_include]),
     Extension("bbox_flitering", ["bbox_flitering.pyx"],
-              extra_compile_args={'gcc': ["-Wno-cpp", "-Wno-unused-function"]},
+              extra_compile_args={'gcc': ["-Wno-unused-function", "-O3"]},
               include_dirs=[numpy_include],
+              language="C++",
               gdb_debug=True),
 ]
 
